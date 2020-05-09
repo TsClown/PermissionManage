@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="permission_cancel">取消</string>
+    <string name="permission_allow">去允许</string>
+    <string name="permission_open">去打开</string>
+    <string name="permission_not_granted_hint">该功能需要%s权限</string>
+    <string name="permission_not_rationale_hint">您可能拒绝了%s权限，此功能暂无法使用。如需使用请前往应用权限设置打开</string>
+
+</resources>
