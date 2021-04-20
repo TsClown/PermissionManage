@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="colorBlack">#333333</color>
+    <color name="colorLightBlack">#999999</color>
+    <color name="colorMiddleBlack">#666666</color>
+    <color name="colorSplitLine">#E6E6E6</color>
+</resources>

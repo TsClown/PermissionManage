@@ -8,6 +8,9 @@ import android.content.Intent;
 import android.net.Uri;
 import android.provider.Settings;
 import android.text.TextUtils;
+import android.view.View;
+import android.widget.Button;
+import android.widget.TextView;
 
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
@@ -19,18 +22,6 @@ import java.util.Set;
 
 import io.reactivex.functions.Consumer;
 
-/**
- * PermissionManager permissionManager = new PermissionManager.Builder(this)
- *                 .setPermissionArray(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE
- *                         , Manifest.permission.WRITE_EXTERNAL_STORAGE
- *                         , Manifest.permission.RECORD_AUDIO})
- *                 .setPermissionNameCombine("存储、麦克风")
- *                 .setDialogTitle("帮助")
- *                 .setPermissionCallback(granted -> {
- *                     Log.e("PermissionCallback", "granted" + granted);
- *                 }).create();
- *         permissionManager.request();
- */
 public class PermissionManager {
 
     private Dialog mPermissionRationaleDialog;
@@ -48,7 +39,13 @@ public class PermissionManager {
     private String mPermissionNameCombine;
     private PermissionCallback mPermissionCallback;
 
+    private boolean mIsFirstRequestPermission;
+    private boolean mIsFirstRequestPermissionShowDialog;
+
     private PermissionManager(Builder builder) {
+        mIsFirstRequestPermission = true;
+        mIsFirstRequestPermissionShowDialog = builder.mIsFirstRequestPermissionShowDialog;
+
         //自定义dialog可不传
         mPermissionRationaleDialog = builder.mPermissionRationaleDialog;
         mPermissionNotGrantDialog = builder.mPermissionNotGrantDialog;
@@ -67,6 +64,14 @@ public class PermissionManager {
         PreferencesHelper.init(mActivity);
     }
 
+    public void setPermissionRationaleDialog(Dialog permissionRationaleDialog) {
+        this.mPermissionRationaleDialog = permissionRationaleDialog;
+    }
+
+    public void setPermissionNotGrantDialog(Dialog permissionNotGrantDialog) {
+        this.mPermissionNotGrantDialog = permissionNotGrantDialog;
+    }
+
     /**
      * 检查是否是第一次请求权限
      */
@@ -75,25 +80,52 @@ public class PermissionManager {
         if (mPermissionsArray == null) {
             return;
         }
-        boolean permissionIsFirstRequest = getPermissionIsFirstRequest();
+        final boolean permissionIsFirstRequest = getPermissionIsFirstRequest();
         if (permissionIsFirstRequest){ //是第一次询问该权限
+            mIsFirstRequestPermission = false;
             requestPermissions();
         }else {
-            final RxPermissions rxPermissions = new RxPermissions(mActivity);
+            final RxPermissions rxPermissions;
+            if (this.mFragment != null) {
+                rxPermissions = new RxPermissions(this.mFragment);
+            } else {
+                rxPermissions = new RxPermissions(this.mActivity);
+            }
+
             rxPermissions.shouldShowRequestPermissionRationale(mActivity, mPermissionsArray).subscribe(new Consumer<Boolean>() {
                 @Override
                 public void accept(Boolean aBoolean) throws Exception {
-                    if (aBoolean) { //用户没有勾选了不再提醒
-                        boolean isGranted = false;
+                    if (aBoolean) { //用户没有勾选不再提醒
+                        boolean isGranted = true;
                         for (int i = 0; i < mPermissionsArray.length; i++) {
-                            isGranted = rxPermissions.isGranted(mPermissionsArray[i]);
+                            if (!rxPermissions.isGranted(mPermissionsArray[i])) {
+                                if (!mIsFirstRequestPermission || mIsFirstRequestPermissionShowDialog) {
+                                    showPermissionNotGrantedDialog();
+                                }
+                                isGranted = false;
+                                break;
+                            }
                         }
-                        if (!isGranted) {
-                            PermissionManager.this.showPermissionNotGrantedDialog();
+
+                        if (mPermissionCallback != null){
+                            if (isGranted){
+                                mPermissionCallback.onPermissionResult(true);
+                            }else{
+                                mPermissionCallback.onPermissionResult(false);
+                            }
                         }
-                    } else { //用户勾选了不再提醒
-                        PermissionManager.this.showPermissionRationaleDialog();
+
+                    } else if (mIsFirstRequestPermission && !mIsFirstRequestPermissionShowDialog) {
+                        if (mPermissionCallback != null) {
+                            mPermissionCallback.onPermissionRationale();
+                        }
+                    } else {
+                        showPermissionRationaleDialog();
+                        if (mPermissionCallback != null) {
+                            mPermissionCallback.onPermissionRationale();
+                        }
                     }
+                    mIsFirstRequestPermission = false;
                 }
             });
         }
@@ -126,82 +158,93 @@ public class PermissionManager {
     }
 
     public void showPermissionNotGrantedDialog(){
-        if (mPermissionNotGrantDialog == null){
-            mPermissionNotGrantDialog = generateDefaultNotGrantDialog(getPermissionNotGrantDes(mPermissionNameCombine));
+        if (mPermissionNotGrantDialog == null) {
+            initDefaultNotGrantDialog(getPermissionNotGrantDes(mPermissionNameCombine));
         }
 
-        if (!mPermissionNotGrantDialog.isShowing()){
+        if (!mPermissionNotGrantDialog.isShowing()) {
             mPermissionNotGrantDialog.show();
         }
     }
 
     public void showPermissionRationaleDialog(){
-        if (mPermissionRationaleDialog == null){
-            mPermissionRationaleDialog = generateDefaultRationaleDialog(getPermissionRationaleDes(mPermissionNameCombine));
+        if (mPermissionRationaleDialog == null) {
+            initDefaultRationaleDialog(getPermissionRationaleDes(mPermissionNameCombine));
         }
 
-        if (!mPermissionRationaleDialog.isShowing()){
+        if (!mPermissionRationaleDialog.isShowing()) {
             mPermissionRationaleDialog.show();
         }
     }
 
-    private AlertDialog generateDefaultRationaleDialog(String message){
-        AlertDialog.Builder builder = new AlertDialog.Builder(mActivity);
-        builder.setTitle(mDialogTitle);
-        builder.setMessage(message);
-        builder.setCancelable(false);
-
-        builder.setPositiveButton(mActivity.getString(R.string.permission_open), new DialogInterface.OnClickListener() {
+    @SuppressLint({"CutPasteId"})
+    private void initDefaultRationaleDialog(String message) {
+        mPermissionRationaleDialog = new CommonDialog(mActivity);
+        mPermissionRationaleDialog.setContentView(R.layout.dialog_permission_rationale);
+        TextView titleTextView = (TextView)mPermissionRationaleDialog.findViewById(R.id.rationaleTitleTextView);
+        titleTextView.setText(mDialogTitle);
+        TextView contentTextView = (TextView)mPermissionRationaleDialog.findViewById(R.id.rationaleContentTextView);
+        contentTextView.setText(message);
+        mPermissionRationaleDialog.setCancelable(false);
+        Button allowButton = (Button)mPermissionRationaleDialog.findViewById(R.id.rationaleOpenButton);
+        Button cancelButton = (Button)mPermissionRationaleDialog.findViewById(R.id.rationaleCancelButton);
+        allowButton.setOnClickListener(new View.OnClickListener() {
             @Override
-            public void onClick(DialogInterface dialog, int which) {
+            public void onClick(View v) {
                 if (mRationalClickListener != null) {
-                    mRationalClickListener.onPositiveClick(dialog, which);
+                    mRationalClickListener.onPositiveClick(mPermissionRationaleDialog);
                 } else {
-                    PermissionManager.this.jumpToAppSetting();
+                    PermissionUtil.jumpToAppSetting(mActivity);
                 }
-            }
-        });
-        builder.setNegativeButton(mActivity.getString(R.string.permission_cancel), new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialog, int which) {
-                if (mRationalClickListener != null) {
-                    mRationalClickListener.onNegativeClick(dialog, which);
-                }
-                dialog.dismiss();
-            }
-        });
 
-        return builder.create();
+                mPermissionRationaleDialog.dismiss();
+            }
+        });
+        cancelButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (mRationalClickListener != null) {
+                    mRationalClickListener.onNegativeClick(mPermissionRationaleDialog);
+                }
+
+                mPermissionRationaleDialog.dismiss();
+            }
+        });
     }
 
-    private AlertDialog generateDefaultNotGrantDialog(String message){
-        AlertDialog.Builder builder = new AlertDialog.Builder(mActivity);
-        builder.setTitle(mDialogTitle);
-        builder.setMessage(message);
-        builder.setCancelable(false);
-
-        builder.setPositiveButton(mActivity.getString(R.string.permission_allow), new DialogInterface.OnClickListener() {
+    @SuppressLint({"CutPasteId"})
+    private void initDefaultNotGrantDialog(String message) {
+        mPermissionNotGrantDialog = new CommonDialog(mActivity);
+        mPermissionNotGrantDialog.setContentView(R.layout.dialog_permission_not_granted);
+        TextView titleTextView = (TextView)mPermissionNotGrantDialog.findViewById(R.id.notGrantedTitleTextView);
+        titleTextView.setText(mDialogTitle);
+        TextView contentTextView = (TextView)mPermissionNotGrantDialog.findViewById(R.id.notGrantedContentTextView);
+        contentTextView.setText(message);
+        mPermissionNotGrantDialog.setCancelable(false);
+        Button cancelButton = (Button)mPermissionNotGrantDialog.findViewById(R.id.notGrantedCancelButton);
+        Button allowButton = (Button)mPermissionNotGrantDialog.findViewById(R.id.notGrantedAllowButton);
+        allowButton.setOnClickListener(new View.OnClickListener() {
             @Override
-            public void onClick(DialogInterface dialog, int which) {
+            public void onClick(View v) {
                 if (mNotGrantClickListener != null) {
-                    mNotGrantClickListener.onPositiveClick(dialog, which);
+                    mNotGrantClickListener.onPositiveClick(mPermissionNotGrantDialog);
                 } else {
-                    PermissionManager.this.requestPermissions();
+                    requestPermissions();
                 }
-                dialog.dismiss();
-            }
-        });
-        builder.setNegativeButton(mActivity.getString(R.string.permission_cancel), new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialog, int which) {
-                if (mNotGrantClickListener != null) {
-                    mNotGrantClickListener.onNegativeClick(dialog, which);
-                }
-                dialog.dismiss();
-            }
-        });
 
-        return builder.create();
+                mPermissionNotGrantDialog.dismiss();
+            }
+        });
+        cancelButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (mNotGrantClickListener != null) {
+                    mNotGrantClickListener.onNegativeClick(mPermissionNotGrantDialog);
+                }
+
+                mPermissionNotGrantDialog.dismiss();
+            }
+        });
     }
 
     /**
@@ -257,82 +300,84 @@ public class PermissionManager {
         mActivity.startActivity(intent);
     }
 
-    public static class Builder{
-        //自定义dialog可不传
+    public static class Builder {
         private Dialog mPermissionRationaleDialog;
         private Dialog mPermissionNotGrantDialog;
-        private OnDialogButtonClickListener mRationalClickListener;
-        private OnDialogButtonClickListener mNotGrantClickListener;
+        private PermissionManager.OnDialogButtonClickListener mRationalClickListener;
+        private PermissionManager.OnDialogButtonClickListener mNotGrantClickListener;
         private String mDialogTitle;
-
-        //必传
-        private String[] mPermissionsArray;
         private String mPermissionNameCombine;
+        private boolean mIsFirstRequestPermissionShowDialog = true;
+        private String[] mPermissionsArray;
         private PermissionCallback mPermissionCallback;
-
         private FragmentActivity mActivity;
         private Fragment mFragment;
 
-        public Builder(Fragment fragment){
-            if (fragment == null){
+        public Builder(Fragment fragment) {
+            if (fragment == null) {
                 throw new IllegalArgumentException("Can only use lower 16 bits for requestCode");
-            }else {
-                mFragment = fragment;
-                mActivity = fragment.getActivity();
+            } else {
+                this.mFragment = fragment;
+                this.mActivity = fragment.getActivity();
             }
         }
 
         public Builder(FragmentActivity activity) {
-            mActivity = activity;
+            this.mActivity = activity;
         }
 
-        public Builder setPermissionRationaleDialog(Dialog permissionRationaleDialog) {
-            mPermissionRationaleDialog = permissionRationaleDialog;
+        public PermissionManager.Builder setPermissionRationaleDialog(Dialog permissionRationaleDialog) {
+            this.mPermissionRationaleDialog = permissionRationaleDialog;
             return this;
         }
 
-        public Builder setPermissionNotGrantDialog(Dialog permissionNotGrantDialog) {
-            mPermissionNotGrantDialog = permissionNotGrantDialog;
+        public PermissionManager.Builder setPermissionNotGrantDialog(Dialog permissionNotGrantDialog) {
+            this.mPermissionNotGrantDialog = permissionNotGrantDialog;
             return this;
         }
 
-        public Builder setRationalClickListener(OnDialogButtonClickListener rationalClickListener) {
-            mRationalClickListener = rationalClickListener;
+        public PermissionManager.Builder setRationalClickListener(PermissionManager.OnDialogButtonClickListener rationalClickListener) {
+            this.mRationalClickListener = rationalClickListener;
             return this;
         }
 
-        public Builder setNotGrantClickListener(OnDialogButtonClickListener notGrantClickListener) {
-            mNotGrantClickListener = notGrantClickListener;
+        public PermissionManager.Builder setNotGrantClickListener(PermissionManager.OnDialogButtonClickListener notGrantClickListener) {
+            this.mNotGrantClickListener = notGrantClickListener;
             return this;
         }
 
-        public Builder setDialogTitle(String dialogTitle) {
+        public PermissionManager.Builder setDialogTitle(String dialogTitle) {
             this.mDialogTitle = dialogTitle;
             return this;
         }
 
-        public Builder setPermissionArray(String[] permissionsArray) {
-            mPermissionsArray = permissionsArray;
+        public PermissionManager.Builder setPermissionArray(String[] permissionsArray) {
+            this.mPermissionsArray = permissionsArray;
             return this;
         }
 
-        public Builder setPermissionNameCombine(String permissionNameCombine) {
-            mPermissionNameCombine = permissionNameCombine;
+        public PermissionManager.Builder setPermissionNameCombine(String permissionNameCombine) {
+            this.mPermissionNameCombine = permissionNameCombine;
             return this;
         }
 
-        public Builder setPermissionCallback(PermissionCallback permissionCallback) {
-            mPermissionCallback = permissionCallback;
+        public PermissionManager.Builder setPermissionCallback(PermissionCallback permissionCallback) {
+            this.mPermissionCallback = permissionCallback;
             return this;
         }
 
-        public PermissionManager create(){
+        public PermissionManager.Builder setFirstRequestPermissionShowDialog(boolean firstRequestPermissionShowDialog) {
+            this.mIsFirstRequestPermissionShowDialog = firstRequestPermissionShowDialog;
+            return this;
+        }
+
+        public PermissionManager create() {
             return new PermissionManager(this);
         }
     }
 
     public interface OnDialogButtonClickListener{
-        void onPositiveClick(DialogInterface dialog, int which);
-        void onNegativeClick(DialogInterface dialog, int which);
+        void onPositiveClick(DialogInterface dialog);
+        void onNegativeClick(DialogInterface dialog);
     }
 }

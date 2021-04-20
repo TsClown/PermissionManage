@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:layout_width="@dimen/dialog_width"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_dialog_frame"
+    >
+
+    <TextView
+        android:id="@+id/notGrantedTitleTextView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="@dimen/dialog_common_margin"
+        android:gravity="center"
+        android:textColor="@color/colorBlack"
+        android:textSize="@dimen/dialog_title_text_size"
+        />
+
+    <TextView
+        android:id="@+id/notGrantedContentTextView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/dialog_common_margin"
+        android:layout_marginEnd="@dimen/dialog_common_margin"
+        android:gravity="center"
+        android:textColor="@color/colorBlack"
+        />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/dialog_split_line_height"
+        android:layout_marginTop="@dimen/dialog_line_below_content_margin"
+        android:background="@color/colorSplitLine"
+        />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/dialog_button_height"
+        >
+
+        <Button
+            android:id="@+id/notGrantedCancelButton"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@null"
+            android:textColor="@android:color/holo_blue_light"
+            android:textSize="@dimen/dialog_button_text_size"
+            android:text="@string/permission_cancel"
+            />
+
+        <View
+            android:layout_height="match_parent"
+            android:layout_width="@dimen/dialog_split_line_height"
+            android:background="@color/colorSplitLine"
+            />
+
+        <Button
+            android:id="@+id/notGrantedAllowButton"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@null"
+            android:text="@string/permission_allow"
+            android:textColor="@android:color/holo_blue_light"
+            android:textSize="@dimen/dialog_button_text_size"
+            />
+
+    </LinearLayout>
+
+</LinearLayout>
